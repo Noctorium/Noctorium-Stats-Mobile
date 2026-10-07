@@ -1,0 +1,32 @@
+name: noctorium_stats
+description: Your Noctorium listening, in numbers -- the statistics the service keeps, on a phone.
+publish_to: none
+
+# What a build nobody gave a version to calls itself. A release passes --build-name and --build-number
+# from its tag (0.13.0 and 1300: major * 10000 + minor * 100 + patch, as Noctorium's own APK is numbered),
+# and both override this.
+version: 0.12.2+1202
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Six, each for one thing, and nothing else.
+  http: ^1.6.0                     # the service and GitHub
+  flutter_secure_storage: ^11.2.0  # the sign-in token, in Android's keystore
+  fl_chart: ^1.2.0                 # the bar charts
+  intl: ^0.20.3                    # numbers and dates
+  shared_preferences: ^2.5.6       # the range last looked at
+  url_launcher: ^6.3.3             # the website and the release page, in the browser
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/noctorium.png

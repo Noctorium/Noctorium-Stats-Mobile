@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The Flutter tool needs it to talk to a running debug build: breakpoints, hot reload. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      A debug build may reach a copy of the service running on the computer it was built on, over plain
+      http, through `adb reverse tcp:3000 tcp:3000`. Only debug builds, and only localhost: see
+      network_security_config.xml.
+    -->
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>
