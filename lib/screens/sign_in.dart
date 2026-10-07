@@ -199,8 +199,8 @@ class _SignInScreenState extends State<SignInScreen> {
                       creating
                           ? 'Then sign in to the same account in the Noctorium player, and everything you play '
                               'there is counted here.'
-                          : 'Use the account you sign in to in the Noctorium player. What you play there while '
-                              'signed in is what is counted here.',
+                          : 'Use the same account as in the Noctorium player. Whatever you play there while signed '
+                              'in is counted here.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium,
                     ),
