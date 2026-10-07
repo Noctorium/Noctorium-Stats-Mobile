@@ -12,7 +12,13 @@ import 'fixtures.dart';
 
 NoctoriumService answering(Future<http.Response> Function(http.Request request) handler,
         {String base = 'http://localhost:3000', Duration timeout = const Duration(seconds: 20)}) =>
-    NoctoriumService(baseUrl: base, client: MockClient(handler), timeout: timeout, userAgent: 'NoctoriumStats/9.9.9');
+    NoctoriumService(
+      baseUrl: base,
+      client: MockClient(handler),
+      timeout: timeout,
+      userAgent: 'NoctoriumStats/9.9.9',
+      loopbackHttp: true,
+    );
 
 http.Response json(Object body, [int status = 200]) =>
     http.Response.bytes(utf8.encode(jsonEncode(body)), status, headers: {'content-type': 'application/json'});
@@ -190,6 +196,31 @@ void main() {
       final error = await failure(() => slow.stats('t', StatsRange.week, offset: Duration.zero));
       expect(error.failure, Failure.offline);
       expect(error.message, startsWith('The Noctorium service took too long to answer.'));
+    });
+
+    test('plain http is for a debug build talking to its own computer, and nothing else', () async {
+      var asked = 0;
+      NoctoriumService at(String base, {required bool loopbackHttp}) => NoctoriumService(
+            baseUrl: base,
+            client: MockClient((_) async {
+              asked++;
+              return json({'error': 'Not signed in.'}, 401);
+            }),
+            loopbackHttp: loopbackHttp,
+          );
+      expect(at('https://noctorium-service.vercel.app', loopbackHttp: false).secure, isTrue);
+      expect(at('http://localhost:3000', loopbackHttp: true).secure, isTrue);
+      expect(at('http://127.0.0.1:3000', loopbackHttp: true).secure, isTrue);
+      expect(at('http://192.168.1.20:3000', loopbackHttp: true).secure, isFalse);
+      expect(at('http://noctorium-service.vercel.app', loopbackHttp: true).secure, isFalse);
+
+      final release = at('http://localhost:3000', loopbackHttp: false);
+      expect(release.secure, isFalse);
+      final error = await failure(() => release.signIn('a@example.test', 'pw'));
+      expect(error.failure, Failure.insecure);
+      expect(error.message, 'This build only talks to the Noctorium service over https, and http://localhost:3000 is not.');
+      // Refused before anything is sent: the password never leaves the phone.
+      expect(asked, 0);
     });
 
     test('a reply that signs in nobody is not taken for a sign-in', () async {

@@ -101,7 +101,7 @@ Dependencies testDeps(
   String version = '0.12.2',
 }) =>
     Dependencies(
-      service: NoctoriumService(baseUrl: 'http://localhost:3000', client: server.client),
+      service: NoctoriumService(baseUrl: 'http://localhost:3000', client: server.client, loopbackHttp: true),
       tokens: tokens ?? MemoryTokenStore(),
       preferences: MemoryPreferences(range),
       version: version,

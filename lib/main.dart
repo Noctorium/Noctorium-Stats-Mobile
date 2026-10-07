@@ -31,6 +31,8 @@ void main() {
         baseUrl: serviceUrl,
         client: client,
         userAgent: 'NoctoriumStats/${appBuildName ?? 'dev'} (Android)',
+        // A copy of the service on the computer, through adb reverse, for a debug build and nothing else.
+        loopbackHttp: kDebugMode,
       ),
       tokens: const SecureTokenStore(),
       preferences: SharedPreferencesStore(),

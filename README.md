@@ -85,9 +85,12 @@ adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb reverse --remove tcp:3000        # afterwards
 ```
 
-Plain http is allowed to `localhost` and `127.0.0.1` in debug builds only
-(`android/app/src/debug/res/xml/network_security_config.xml`); a release build has no such file and talks
-to `https://noctorium-service.vercel.app` unless built with another `NOCTORIUM_SERVICE_URL`.
+Plain http is allowed to `localhost` and `127.0.0.1` in debug builds only. Android is told so in
+`android/app/src/debug/res/xml/network_security_config.xml`, which release builds do not have — but Dart's
+own HTTP client never reads that file, so `NoctoriumService` applies the same rule itself and refuses,
+before sending anything, to talk to any other address over plain http. A release build talks to
+`https://noctorium-service.vercel.app` unless built with another `NOCTORIUM_SERVICE_URL`, and that one has to
+be https.
 
 ### Tests, and pictures of every screen
 

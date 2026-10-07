@@ -70,6 +70,9 @@ enum Failure {
 
   /// The service is up and having trouble.
   server,
+
+  /// This build may not talk to that address: plain http anywhere but a debug build's own loopback.
+  insecure,
 }
 
 class ServiceException implements Exception {
@@ -179,12 +182,27 @@ class NoctoriumService {
     required this.client,
     this.userAgent = 'NoctoriumStats',
     this.timeout = const Duration(seconds: 20),
+    this.loopbackHttp = false,
   }) : base = Uri.parse(baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl);
 
   final Uri base;
+
+  /// Whether plain http to this phone's own loopback address is allowed, which only a debug build is
+  /// given: see [secure].
+  final bool loopbackHttp;
   final String userAgent;
   final Duration timeout;
   final http.Client client;
+
+  /// Whether [base] may be talked to at all: over https, or over plain http to localhost when
+  /// [loopbackHttp] allows it.
+  ///
+  /// The same rule as the debug build's network_security_config.xml, kept here as well because Dart's own
+  /// HTTP client never reads that file: without this, a release built with an http address would send a
+  /// password and a token in the clear without anything stopping it.
+  bool get secure =>
+      base.scheme == 'https' ||
+      (loopbackHttp && base.scheme == 'http' && (base.host == 'localhost' || base.host == '127.0.0.1'));
 
   /// The website, for creating an account there or looking at the same figures in a browser.
   Uri get website => base.replace(path: '/');
@@ -259,6 +277,12 @@ class NoctoriumService {
 
   /// The service's reply as UTF-8 whatever its headers say, so a song title in Cyrillic arrives intact.
   Future<_Reply> _send(Future<http.Response> Function() request) async {
+    if (!secure) {
+      throw ServiceException(
+        Failure.insecure,
+        'This build only talks to the Noctorium service over https, and $base is not.',
+      );
+    }
     try {
       final response = await request().timeout(timeout);
       return _Reply(response.statusCode, utf8.decode(response.bodyBytes, allowMalformed: true));
