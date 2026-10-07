@@ -82,66 +82,76 @@ class _RankedRow extends StatelessWidget {
       excludeSemantics: true,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(
-              width: 28,
-              child: Text(
-                '$rank',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: rank == 1 ? Night.accent : Night.faint,
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: tabular,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '$rank',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: rank == 1 ? Night.accent : Night.faint,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: tabular,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 2),
-                  Row(
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (dot != null) ...[
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      Flexible(
-                        child: Text(
-                          subtitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall,
-                        ),
+                      Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          if (dot != null) ...[
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Flexible(
+                            child: Text(
+                              subtitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 7),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: LinearProgressIndicator(
-                      value: share.clamp(0.02, 1.0),
-                      minHeight: 3,
-                      color: rank == 1 ? Night.accent : Night.accent.withValues(alpha: .55),
-                      backgroundColor: Night.raised,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(value, style: theme.textTheme.titleSmall?.copyWith(fontFeatures: tabular)),
-                Text(detail, style: theme.textTheme.bodySmall?.copyWith(fontFeatures: tabular)),
+                ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(value, style: theme.textTheme.titleSmall?.copyWith(fontFeatures: tabular)),
+                    Text(detail, style: theme.textTheme.bodySmall?.copyWith(fontFeatures: tabular)),
+                  ],
+                ),
               ],
+            ),
+            const SizedBox(height: 8),
+            // Under the whole row, so every bar is measured against the same length whatever the counts
+            // beside it take up.
+            Padding(
+              padding: const EdgeInsets.only(left: 28),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: share.clamp(0.02, 1.0),
+                  minHeight: 3,
+                  color: rank == 1 ? Night.accent : Night.accent.withValues(alpha: .55),
+                  backgroundColor: Night.raised,
+                ),
+              ),
             ),
           ],
         ),
