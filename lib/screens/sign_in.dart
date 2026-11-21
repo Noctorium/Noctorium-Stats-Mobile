@@ -1,6 +1,8 @@
 /// Signing in, or making an account, with the same Noctorium account the player uses.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app.dart';
@@ -34,6 +36,62 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _busy = false;
   bool _hidden = true;
   String? _error;
+
+  /// A browser sign-in waiting to be allowed; and which one, so an older wait that ends late is ignored.
+  DeviceStart? _waiting;
+  int _attempt = 0;
+
+  Future<void> _signInInBrowser() async {
+    if (_busy) return;
+    final attempt = ++_attempt;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final service = widget.deps.service;
+    try {
+      final start = await service.startDeviceSignIn();
+      if (!mounted || attempt != _attempt) return;
+      setState(() {
+        _waiting = start;
+        _busy = false;
+      });
+      unawaited(widget.deps.openLink(start.url));
+      final until = DateTime.now().add(Duration(seconds: start.expiresIn));
+      while (DateTime.now().isBefore(until)) {
+        await Future<void>.delayed(Duration(seconds: start.interval));
+        if (!mounted || attempt != _attempt) return;
+        Session? session;
+        try {
+          session = await service.pollDeviceSignIn(start.pollToken);
+        } on ServiceException catch (error) {
+          // Not reached this time: asked again. Anything else ends the wait.
+          if (error.failure != Failure.offline && error.failure != Failure.server) rethrow;
+        }
+        if (!mounted || attempt != _attempt) return;
+        if (session != null) {
+          await widget.onSignedIn(session);
+          return;
+        }
+      }
+      throw const ServiceException(Failure.refused, 'The code expired. Start again for a new one.');
+    } on ServiceException catch (error) {
+      if (mounted && attempt == _attempt) setState(() => _error = error.message);
+    } finally {
+      if (mounted && attempt == _attempt) {
+        setState(() {
+          _busy = false;
+          _waiting = null;
+        });
+      }
+    }
+  }
+
+  void _cancelBrowser() => setState(() {
+        _attempt++;
+        _waiting = null;
+        _busy = false;
+      });
 
   @override
   void dispose() {
@@ -194,6 +252,29 @@ class _SignInScreenState extends State<SignInScreen> {
                             )
                           : Text(creating ? 'Create account' : 'Sign in'),
                     ),
+                    const SizedBox(height: 12),
+                    if (_waiting case final waiting?) ...[
+                      Text('Allow Noctorium Stats in the browser. Check it shows this code:',
+                          textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+                      const SizedBox(height: 8),
+                      SelectableText(waiting.code,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700, letterSpacing: 3)),
+                      const SizedBox(height: 4),
+                      Text('Waiting for you to allow it…',
+                          textAlign: TextAlign.center, style: theme.textTheme.bodySmall?.copyWith(color: Night.subtext)),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(onPressed: () => widget.deps.openLink(waiting.url), child: const Text('Open in browser')),
+                          TextButton(onPressed: _cancelBrowser, child: const Text('Cancel')),
+                        ],
+                      ),
+                    ] else
+                      OutlinedButton(
+                        onPressed: _busy ? null : _signInInBrowser,
+                        child: const _OneLine('Sign in with Discord, Telegram or GitHub'),
+                      ),
                     const SizedBox(height: 32),
                     Text(
                       creating

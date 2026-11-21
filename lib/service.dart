@@ -51,6 +51,18 @@ class Session {
   final Account account;
 }
 
+/// Signing in from a browser -- with Discord, GitHub, Telegram or email: the code to show, the page to open, and
+/// the secret that collects the token once the listener has allowed it there.
+class DeviceStart {
+  const DeviceStart({required this.code, required this.pollToken, required this.url, this.expiresIn = 600, this.interval = 3});
+
+  final String code;
+  final String pollToken;
+  final Uri url;
+  final int expiresIn;
+  final int interval;
+}
+
 /// What went wrong, as far as the screens need to tell the difference.
 enum Failure {
   /// The email address and password did not match, or an account could not be made with them.
@@ -257,6 +269,42 @@ class NoctoriumService {
     } on FormatException catch (error) {
       throw failureFromError(error)!;
     }
+  }
+
+  Future<DeviceStart> startDeviceSignIn() async {
+    final response = await _send(
+      () => client.post(endpoint('/api/auth/device'), headers: headers(json: true), body: '{}'),
+    );
+    if (response.statusCode != 200) throw failureFor(response.statusCode, response.body, Asking.signIn);
+    final start = _decode(response.body, (json) {
+      final code = json['code'], poll = json['pollToken'], url = json['url'];
+      if (code is! String || poll is! String || url is! String) return null;
+      final expires = json['expiresIn'], interval = json['interval'];
+      return DeviceStart(
+        code: code,
+        pollToken: poll,
+        url: Uri.parse(url),
+        expiresIn: expires is num ? expires.toInt() : 600,
+        interval: interval is num ? interval.toInt().clamp(1, 30) : 3,
+      );
+    });
+    if (start == null) throw failureFromError(const FormatException())!;
+    return start;
+  }
+
+  /// Asks once whether the browser sign-in has been allowed: null while it waits.
+  Future<Session?> pollDeviceSignIn(String pollToken) async {
+    final uri = endpoint('/api/auth/device/poll').replace(queryParameters: {'token': pollToken});
+    final response = await _send(() => client.get(uri, headers: headers()));
+    if (response.statusCode == 202) return null;
+    if (response.statusCode != 200) throw failureFor(response.statusCode, response.body, Asking.signIn);
+    final session = _decode(response.body, (json) {
+      final token = json['token'];
+      final account = Account.fromJson(json['user']);
+      return token is String && token.isNotEmpty && account != null ? Session(token: token, account: account) : null;
+    });
+    if (session == null) throw failureFromError(const FormatException())!;
+    return session;
   }
 
   Future<Session> _session(String path, Map<String, String> body, Asking asking) async {

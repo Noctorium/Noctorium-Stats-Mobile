@@ -24,6 +24,38 @@ http.Response json(Object body, [int status = 200]) =>
     http.Response.bytes(utf8.encode(jsonEncode(body)), status, headers: {'content-type': 'application/json'});
 
 void main() {
+  group('Signing in from a browser', () {
+    test('starts with a code and a page, then waits, then signs in', () async {
+      var polls = 0;
+      final service = answering((request) async {
+        if (request.url.path == '/api/auth/device') {
+          expect(request.method, 'POST');
+          return json({'code': 'ABCD-EFGH', 'pollToken': 'p 1', 'url': 'https://service.noctorium.xyz/device?code=ABCD-EFGH', 'expiresIn': 600, 'interval': 3});
+        }
+        expect(request.url.queryParameters['token'], 'p 1');
+        // An account made with Discord may have no email: it comes back empty, and still signs in.
+        return polls++ == 0
+            ? json({'pending': true}, 202)
+            : json({'token': 'tok', 'user': {'id': 9, 'email': '', 'displayName': 'Disco'}});
+      });
+      final start = await service.startDeviceSignIn();
+      expect(start.code, 'ABCD-EFGH');
+      expect(start.url.host, 'service.noctorium.xyz');
+      expect(await service.pollDeviceSignIn(start.pollToken), isNull);
+      final session = await service.pollDeviceSignIn(start.pollToken);
+      expect(session?.token, 'tok');
+      expect(session?.account.displayName, 'Disco');
+    });
+
+    test('an expired code ends the wait in the service\'s words', () async {
+      final service = answering((_) async => json({'error': 'That code expired.'}, 410));
+      await expectLater(
+        service.pollDeviceSignIn('p'),
+        throwsA(isA<ServiceException>().having((e) => e.message, 'message', 'That code expired.')),
+      );
+    });
+  });
+
   group('Requests', () {
     final service = answering((_) async => json({}));
 
