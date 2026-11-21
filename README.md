@@ -5,7 +5,7 @@ shows the statistics the [Noctorium service](https://github.com/Noctorium/Noctor
 player records while you are signed in to it, counted over the last week, month, three months, year, or
 everything. It is the phone's half of a pair — the desktop's is
 [Noctorium-Stats-Desktop](https://github.com/Noctorium/Noctorium-Stats-Desktop) — and the same figures are
-on the website, at [noctorium-service.vercel.app](https://noctorium-service.vercel.app).
+on the website, at [service.noctorium.xyz](https://service.noctorium.xyz).
 
 It is written in Dart with Flutter, for Android 8.0 and later.
 
