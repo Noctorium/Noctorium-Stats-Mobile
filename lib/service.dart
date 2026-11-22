@@ -51,7 +51,7 @@ class Session {
   final Account account;
 }
 
-/// Signing in from a browser -- with Discord, GitHub, Telegram or email: the code to show, the page to open, and
+/// Signing in from a browser -- with Discord, Telegram or email: the code to show, the page to open, and
 /// the secret that collects the token once the listener has allowed it there.
 class DeviceStart {
   const DeviceStart({required this.code, required this.pollToken, required this.url, this.expiresIn = 600, this.interval = 3});

@@ -273,7 +273,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     ] else
                       OutlinedButton(
                         onPressed: _busy ? null : _signInInBrowser,
-                        child: const _OneLine('Sign in with Discord, Telegram or GitHub'),
+                        child: const _OneLine('Sign in with Discord or Telegram'),
                       ),
                     const SizedBox(height: 32),
                     Text(
