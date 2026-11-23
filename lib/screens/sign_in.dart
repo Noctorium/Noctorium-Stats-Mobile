@@ -98,7 +98,142 @@ class _SignInScreenState extends State<SignInScreen> {
     _email.dispose();
     _password.dispose();
     _name.dispose();
+    for (final code in _codes.values) {
+      code.dispose();
+    }
     super.dispose();
+  }
+
+  /// After the password: two-step verification waiting for its codes.
+  Challenge? _challenge;
+  final Map<String, TextEditingController> _codes = {
+    'totp': TextEditingController(),
+    'telegram': TextEditingController(),
+    'backup': TextEditingController(),
+  };
+  String? _choice;
+  bool _useBackup = false;
+
+  List<String> get _wanted {
+    final asked = _challenge!;
+    if (_useBackup) return const ['backup'];
+    if (asked.strict) return asked.stillNeeded;
+    return [_choice != null && asked.methods.contains(_choice) ? _choice! : asked.methods.first];
+  }
+
+  Future<void> _verify() async {
+    final asked = _challenge;
+    if (asked == null || _busy) return;
+    if (_wanted.any((w) => _codes[w]!.text.trim().isEmpty)) {
+      setState(() => _error = 'Enter the code first.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final session = await widget.deps.service.verify(
+        asked,
+        totp: _wanted.contains('totp') ? _codes['totp']!.text : null,
+        telegram: _wanted.contains('telegram') ? _codes['telegram']!.text : null,
+        backup: _wanted.contains('backup') ? _codes['backup']!.text : null,
+      );
+      await widget.onSignedIn(session);
+    } on ServiceException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        if (error.challenge != null) {
+          _challenge = error.challenge;
+        } else if (error.failure == Failure.refused) {
+          _challenge = null;
+        }
+        _error = error.message;
+      });
+    } finally {
+      for (final code in _codes.values) {
+        code.clear();
+      }
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _sendTelegramCode() async {
+    final asked = _challenge;
+    if (asked == null) return;
+    try {
+      await widget.deps.service.sendTelegramCode(asked);
+      if (mounted) setState(() => _error = 'Sent. Check Telegram for the code.');
+    } on ServiceException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    }
+  }
+
+  /// Two-step verification, after the password: a code from the authenticator app, one the login bot sends on
+  /// Telegram, or a backup code. With both ways on, either one this time; in strict mode, both.
+  List<Widget> _verification(ThemeData theme) {
+    final asked = _challenge!;
+    String label(String way) =>
+        way == 'totp' ? 'Code from your authenticator app' : way == 'telegram' ? 'Code Telegram sent you' : 'Backup code';
+    return [
+      Text(
+        asked.strict ? 'Strict mode is on: this sign-in needs both codes.' : 'Two-step verification: enter a code to finish signing in.',
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodyLarge,
+      ),
+      const SizedBox(height: 16),
+      if (!asked.strict && !_useBackup && asked.methods.length > 1) ...[
+        SegmentedButton<String>(
+          segments: [
+            for (final way in asked.methods)
+              ButtonSegment(value: way, label: _OneLine(way == 'totp' ? 'Authenticator' : 'Telegram')),
+          ],
+          selected: {_wanted.first},
+          showSelectedIcon: false,
+          onSelectionChanged: _busy ? null : (s) => setState(() => _choice = s.first),
+        ),
+        const SizedBox(height: 16),
+      ],
+      for (final way in _wanted) ...[
+        TextField(
+          controller: _codes[way],
+          enabled: !_busy,
+          keyboardType: way == 'backup' ? TextInputType.text : TextInputType.number,
+          autofillHints: const [AutofillHints.oneTimeCode],
+          onSubmitted: (_) => _verify(),
+          decoration: InputDecoration(labelText: label(way)),
+        ),
+        if (way == 'telegram')
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(onPressed: _busy ? null : _sendTelegramCode, child: const Text('Send me a code on Telegram')),
+          ),
+        const SizedBox(height: 12),
+      ],
+      if (_error case final error?) ...[
+        const SizedBox(height: 4),
+        _ErrorLine(text: error),
+      ],
+      const SizedBox(height: 16),
+      FilledButton(
+        onPressed: _busy ? null : _verify,
+        child: _busy
+            ? const SizedBox.square(dimension: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: onAccent))
+            : const Text('Continue'),
+      ),
+      const SizedBox(height: 8),
+      TextButton(
+        onPressed: _busy ? null : () => setState(() => _useBackup = !_useBackup),
+        child: Text(_useBackup ? 'Use my app or Telegram' : 'Use a backup code'),
+      ),
+      TextButton(
+        onPressed: _busy ? null : () => setState(() {
+          _challenge = null;
+          _error = null;
+        }),
+        child: const Text('Cancel'),
+      ),
+    ];
   }
 
   /// What can be said without asking the service.
@@ -132,7 +267,12 @@ class _SignInScreenState extends State<SignInScreen> {
           : await service.createAccount(_email.text, _password.text, displayName: _name.text);
       await widget.onSignedIn(session);
     } on ServiceException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() {
+          _challenge = error.challenge;
+          _error = error.challenge == null ? error.message : null;
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -180,6 +320,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       _Notice(text: notice),
                       const SizedBox(height: 16),
                     ],
+                    if (_challenge != null) ..._verification(theme) else ...[
                     SegmentedButton<_Mode>(
                       // On one line whatever the text size, shrinking to fit rather than wrapping inside a
                       // segment that does not grow to hold a second line.
@@ -275,6 +416,7 @@ class _SignInScreenState extends State<SignInScreen> {
                         onPressed: _busy ? null : _signInInBrowser,
                         child: const _OneLine('Sign in with Discord or Telegram'),
                       ),
+                    ],
                     const SizedBox(height: 32),
                     Text(
                       creating

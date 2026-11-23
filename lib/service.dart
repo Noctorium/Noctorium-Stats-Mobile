@@ -19,8 +19,47 @@ import 'stats.dart';
 /// `adb reverse tcp:3000 tcp:3000`.
 const String serviceUrl = String.fromEnvironment(
   'NOCTORIUM_SERVICE_URL',
-  defaultValue: 'https://noctorium-service.vercel.app',
+  defaultValue: 'https://stats.noctorium.xyz',
 );
+
+/// Signing in and the account: its own server since 0.39. The statistics stay at [serviceUrl].
+const String accountUrl = String.fromEnvironment('NOCTORIUM_ACCOUNT_URL', defaultValue: 'https://account.noctorium.xyz');
+
+/// Two-step verification, asked for after the password: the ways the account can be verified ("totp" for an
+/// authenticator app, "telegram" for a code the login bot sends), whether strict mode needs every one of them, what is
+/// proved already, and the service's words about the last try.
+class Challenge {
+  const Challenge({required this.ticket, required this.methods, this.strict = false, this.done = const [], this.message});
+
+  final String ticket;
+  final List<String> methods;
+  final bool strict;
+  final List<String> done;
+  final String? message;
+
+  /// What is still to be given: in strict mode every way not yet proved, otherwise any one of them.
+  List<String> get stillNeeded => strict ? methods.where((m) => !done.contains(m)).toList() : methods;
+
+  static Challenge? fromBody(String body, {bool keepMessage = true}) {
+    try {
+      final json = jsonDecode(body);
+      if (json is! Map<String, dynamic>) return null;
+      final ticket = json['challenge'];
+      if (ticket is! String || ticket.isEmpty) return null;
+      List<String> list(String name) => (json[name] is List) ? (json[name] as List).whereType<String>().toList() : const [];
+      final said = json['error'];
+      return Challenge(
+        ticket: ticket,
+        methods: list('methods'),
+        strict: json['strict'] == true,
+        done: list('done'),
+        message: keepMessage && said is String ? said : null,
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+}
 
 class Account {
   const Account({required this.id, required this.email, required this.displayName});
@@ -65,6 +104,9 @@ class DeviceStart {
 
 /// What went wrong, as far as the screens need to tell the difference.
 enum Failure {
+  /// The password was right, and two-step verification asks for a code: see [ServiceException.challenge].
+  verify,
+
   /// The email address and password did not match, or an account could not be made with them.
   refused,
 
@@ -88,7 +130,10 @@ enum Failure {
 }
 
 class ServiceException implements Exception {
-  const ServiceException(this.failure, this.message, {this.status});
+  const ServiceException(this.failure, this.message, {this.status, this.challenge});
+
+  /// When [failure] is [Failure.verify]: what the code step needs.
+  final Challenge? challenge;
 
   final Failure failure;
 
@@ -195,9 +240,17 @@ class NoctoriumService {
     this.userAgent = 'NoctoriumStats',
     this.timeout = const Duration(seconds: 20),
     this.loopbackHttp = false,
-  }) : base = Uri.parse(baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl);
+    String? accountBaseUrl,
+  })  : base = Uri.parse(_trimmed(baseUrl)),
+        // The live statistics go with the live account server; a server of one's own answers for both.
+        account = Uri.parse(_trimmed(accountBaseUrl ?? (baseUrl == serviceUrl ? accountUrl : baseUrl)));
+
+  static String _trimmed(String url) => url.endsWith('/') ? url.substring(0, url.length - 1) : url;
 
   final Uri base;
+
+  /// Where signing in is asked: the account server.
+  final Uri account;
 
   /// Whether plain http to this phone's own loopback address is allowed, which only a debug build is
   /// given: see [secure].
@@ -219,7 +272,11 @@ class NoctoriumService {
   /// The website, for creating an account there or looking at the same figures in a browser.
   Uri get website => base.replace(path: '/');
 
-  Uri endpoint(String path) => base.replace(path: '${base.path}$path');
+  /// Listening goes to the statistics server, signing in and the rest of the account to the account server.
+  Uri endpoint(String path) {
+    final server = path == '/api/stats' ? base : account;
+    return server.replace(path: '${server.path}$path');
+  }
 
   /// The statistics request for [range], counted on a clock [offset] from UTC.
   Uri statsUri(StatsRange range, {required Duration offset, int limit = 10}) =>
@@ -307,10 +364,35 @@ class NoctoriumService {
     return session;
   }
 
+  /// The codes for [challenge]'s sign-in; whichever are given count. A wrong or missing one comes back as
+  /// [Failure.verify] again, with what is proved so far and what was wrong.
+  Future<Session> verify(Challenge challenge, {String? totp, String? telegram, String? backup}) => _session(
+        '/api/auth/challenge/verify',
+        {
+          'challenge': challenge.ticket,
+          if (totp != null && totp.trim().isNotEmpty) 'totp': totp.trim(),
+          if (telegram != null && telegram.trim().isNotEmpty) 'telegram': telegram.trim(),
+          if (backup != null && backup.trim().isNotEmpty) 'backup': backup.trim(),
+        },
+        Asking.signIn,
+      );
+
+  /// Asks the login bot to send [challenge]'s code on Telegram.
+  Future<void> sendTelegramCode(Challenge challenge) async {
+    final response = await _send(
+      () => client.post(endpoint('/api/auth/challenge/telegram'), headers: headers(json: true), body: jsonEncode({'challenge': challenge.ticket})),
+    );
+    if (response.statusCode >= 300) throw failureFor(response.statusCode, response.body, Asking.signIn);
+  }
+
   Future<Session> _session(String path, Map<String, String> body, Asking asking) async {
     final response = await _send(
       () => client.post(endpoint(path), headers: headers(json: true), body: jsonEncode(body)),
     );
+    // Two-step verification: the first answer's words are for apps too old to ask for a code, so only a later one's
+    // -- about the code itself -- are kept.
+    final asked = Challenge.fromBody(response.body, keepMessage: path.endsWith('/verify'));
+    if (asked != null) throw ServiceException(Failure.verify, asked.message ?? 'Enter a code to finish signing in.', challenge: asked);
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw failureFor(response.statusCode, response.body, asking);
     }

@@ -24,6 +24,32 @@ http.Response json(Object body, [int status = 200]) =>
     http.Response.bytes(utf8.encode(jsonEncode(body)), status, headers: {'content-type': 'application/json'});
 
 void main() {
+  group('Two-step verification', () {
+    test('a right password asks for a code, and the codes go to the challenge', () async {
+      final seen = <http.Request>[];
+      final service = answering((request) async {
+        seen.add(request);
+        if (request.url.path == '/api/auth/login') {
+          return json({'error': 'words for old apps', 'challenge': 't1', 'methods': ['totp', 'telegram'], 'strict': true}, 401);
+        }
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        return body['telegram'] == null
+            ? json({'error': 'Strict mode is on: both codes are needed.', 'challenge': 't1', 'methods': ['totp', 'telegram'], 'strict': true, 'done': ['totp']}, 401)
+            : json({'token': 'tok', 'user': {'id': 7, 'email': 'a@example.com', 'displayName': 'A'}});
+      });
+      final asked = await service.signIn('a@example.com', 'pw').then<Challenge?>((_) => null, onError: (Object e) => (e as ServiceException).challenge);
+      expect(asked?.methods, ['totp', 'telegram']);
+      expect(asked?.message, isNull, reason: "the words meant for old apps were kept");
+      final half = await service.verify(asked!, totp: '123456').then<ServiceException?>((_) => null, onError: (Object e) => e as ServiceException);
+      expect(half?.failure, Failure.verify);
+      expect(half?.challenge?.stillNeeded, ['telegram']);
+      expect(half?.message, 'Strict mode is on: both codes are needed.');
+      final session = await service.verify(half!.challenge!, telegram: '654321');
+      expect(session.token, 'tok');
+      expect(seen.last.url.path, '/api/auth/challenge/verify');
+    });
+  });
+
   group('Signing in from a browser', () {
     test('starts with a code and a page, then waits, then signs in', () async {
       var polls = 0;
