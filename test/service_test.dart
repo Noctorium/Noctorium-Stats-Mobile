@@ -39,7 +39,7 @@ void main() {
       });
       final asked = await service.signIn('a@example.com', 'pw').then<Challenge?>((_) => null, onError: (Object e) => (e as ServiceException).challenge);
       expect(asked?.methods, ['totp', 'telegram']);
-      expect(asked?.message, isNull, reason: "the words meant for old apps were kept");
+      expect(asked?.message, isNull, reason: 'the words meant for old apps were kept');
       final half = await service.verify(asked!, totp: '123456').then<ServiceException?>((_) => null, onError: (Object e) => e as ServiceException);
       expect(half?.failure, Failure.verify);
       expect(half?.challenge?.stillNeeded, ['telegram']);
