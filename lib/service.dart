@@ -62,11 +62,14 @@ class Challenge {
 }
 
 class Account {
-  const Account({required this.id, required this.email, required this.displayName});
+  const Account({required this.id, required this.email, required this.displayName, this.avatarUrl});
 
   final int id;
   final String email;
   final String displayName;
+
+  /// The profile picture on the account service, when there is one.
+  final String? avatarUrl;
 
   static Account? fromJson(Object? json) {
     if (json is! Map<String, dynamic>) return null;
@@ -74,10 +77,12 @@ class Account {
     final email = json['email'];
     if (id is! num || email is! String) return null;
     final name = json['displayName'];
+    final avatar = json['avatarUrl'];
     return Account(
       id: id.toInt(),
       email: email,
       displayName: name is String && name.trim().isNotEmpty ? name.trim() : email.split('@').first,
+      avatarUrl: avatar is String && avatar.isNotEmpty ? avatar : null,
     );
   }
 }

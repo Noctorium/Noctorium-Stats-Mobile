@@ -158,6 +158,11 @@ void main() {
       final account = await service.me('t');
       expect(account.id, 9);
       expect(account.displayName, 'kit');
+      expect(account.avatarUrl, isNull);
+      final pictured = answering((_) async => json({
+            'user': {'id': 9, 'email': 'kit@example.test', 'displayName': 'Kit', 'avatarUrl': 'https://account.noctorium.xyz/avatar/k'},
+          }));
+      expect((await pictured.me('t')).avatarUrl, 'https://account.noctorium.xyz/avatar/k');
     });
 
     test('a song title in Cyrillic arrives intact whatever the headers say', () async {

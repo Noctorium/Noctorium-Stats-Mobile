@@ -236,12 +236,23 @@ class _DashboardState extends State<Dashboard> {
     final offset = widget.deps.offset();
     final use24 = MediaQuery.alwaysUse24HourFormatOf(context);
     final name = _account?.displayName;
+    final avatar = _account?.avatarUrl;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          name ?? 'Your listening',
-          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+        Row(
+          children: [
+            if (avatar != null) ...[
+              CircleAvatar(radius: 18, backgroundImage: NetworkImage(avatar)),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Text(
+                name ?? 'Your listening',
+                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 4),
         Text(
